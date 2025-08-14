@@ -88,21 +88,59 @@ export const useDocumentStore = create<DocumentStore>()(
           const document = state.documents.find(d => d.id === id);
           if (!document) return state;
 
-          const childDocumentIds = document.childDocumentIds;
+          const collectAllDocumentIds = (
+            docId: string,
+            collected: Set<string> = new Set()
+          ): Set<string> => {
+            if (collected.has(docId)) return collected;
+
+            collected.add(docId);
+            const doc = state.documents.find(d => d.id === docId);
+
+            if (doc && doc.childDocumentIds.length > 0) {
+              doc.childDocumentIds.forEach(childId => {
+                collectAllDocumentIds(childId, collected);
+              });
+            }
+
+            return collected;
+          };
+
+          const allDocumentsToDelete = collectAllDocumentIds(id);
+          const documentsToDeleteArray = Array.from(allDocumentsToDelete);
 
           // 삭제되는 문서와 하위 문서들을 expandedDocuments에서도 제거
           const newExpandedDocuments = new Set(state.expandedDocuments);
-          newExpandedDocuments.delete(id);
-          childDocumentIds.forEach(childId =>
-            newExpandedDocuments.delete(childId)
+          documentsToDeleteArray.forEach(docId =>
+            newExpandedDocuments.delete(docId)
           );
+
+          const updatedBlocks = state.blocks.filter(block => {
+            if (allDocumentsToDelete.has(block.pageId)) {
+              return false;
+            }
+
+            if (
+              block.type === "page" &&
+              block.linkedPageId &&
+              allDocumentsToDelete.has(block.linkedPageId)
+            ) {
+              return false;
+            }
+
+            return true;
+          });
 
           return {
             documents: state.documents.filter(
-              d => d.id !== id && !childDocumentIds.includes(d.id)
+              d => !allDocumentsToDelete.has(d.id)
             ),
-            currentDocument:
-              state.currentDocument?.id === id ? null : state.currentDocument,
+            blocks: updatedBlocks,
+            currentDocument: allDocumentsToDelete.has(
+              state.currentDocument?.id || ""
+            )
+              ? null
+              : state.currentDocument,
             expandedDocuments: newExpandedDocuments,
           };
         });
@@ -212,6 +250,9 @@ export const useDocumentStore = create<DocumentStore>()(
           return {
             ...state,
             blocks: [...updatedBlocks, newBlock],
+            documents: state.documents.map(doc =>
+              doc.id === documentId ? { ...doc, updatedAt: new Date() } : doc
+            ),
           };
         });
       },
@@ -224,36 +265,107 @@ export const useDocumentStore = create<DocumentStore>()(
               ? { ...block, ...updates }
               : block
           ),
+          documents: state.documents.map(doc =>
+            doc.id === documentId ? { ...doc, updatedAt: new Date() } : doc
+          ),
         }));
       },
 
       deleteBlockFromDocument: (documentId, blockId) => {
         set(state => {
-          const updatedBlocks = state.blocks.filter(
-            block => !(block.pageId === documentId && block.id === blockId)
+          const blockToDelete = state.blocks.find(
+            block => block.pageId === documentId && block.id === blockId
           );
 
-          // 삭제 후 남은 블록들의 order를 재정렬
-          const remainingBlocks = updatedBlocks
-            .filter(b => b.pageId === documentId)
-            .sort((a, b) => a.order - b.order);
+          if (!blockToDelete) return state;
 
-          // order 값을 0부터 순차적으로 재할당
-          const reorderedBlocks = remainingBlocks.map((block, index) => ({
-            ...block,
-            order: index,
-          }));
+          // 하위 페이지 블록인지 확인 (type이 'page'인 경우)
+          if (blockToDelete.type === "page" && blockToDelete.linkedPageId) {
+            const collectAllDocumentIds = (
+              docId: string,
+              collected: Set<string> = new Set()
+            ): Set<string> => {
+              if (collected.has(docId)) return collected;
 
-          // 전체 블록 배열에서 해당 문서의 블록들만 업데이트
-          const finalBlocks = [
-            ...updatedBlocks.filter(b => b.pageId !== documentId),
-            ...reorderedBlocks,
-          ];
+              collected.add(docId);
+              const doc = state.documents.find(d => d.id === docId);
 
-          return {
-            ...state,
-            blocks: finalBlocks,
-          };
+              if (doc && doc.childDocumentIds.length > 0) {
+                doc.childDocumentIds.forEach(childId => {
+                  collectAllDocumentIds(childId, collected);
+                });
+              }
+
+              return collected;
+            };
+
+            const allDocumentsToDelete = collectAllDocumentIds(
+              blockToDelete.linkedPageId
+            );
+
+            // 하위 페이지들의 모든 블록 삭제
+            const updatedBlocks = state.blocks.filter(
+              block => !allDocumentsToDelete.has(block.pageId)
+            );
+
+            // 하위 페이지들도 documents에서 삭제
+            const updatedDocuments = state.documents.filter(
+              doc => !allDocumentsToDelete.has(doc.id)
+            );
+
+            // 현재 문서의 블록만 남기고 order 재정렬
+            const remainingBlocks = updatedBlocks
+              .filter(b => b.pageId === documentId)
+              .sort((a, b) => a.order - b.order);
+
+            const reorderedBlocks = remainingBlocks.map((block, index) => ({
+              ...block,
+              order: index,
+            }));
+
+            const finalBlocks = [
+              ...updatedBlocks.filter(b => b.pageId !== documentId),
+              ...reorderedBlocks,
+            ];
+
+            return {
+              ...state,
+              documents: updatedDocuments,
+              blocks: finalBlocks,
+              currentDocument: allDocumentsToDelete.has(
+                state.currentDocument?.id || ""
+              )
+                ? null
+                : state.currentDocument,
+            };
+          } else {
+            // 일반 블록 삭제 (기존 로직)
+            const updatedBlocks = state.blocks.filter(
+              block => !(block.pageId === documentId && block.id === blockId)
+            );
+
+            const remainingBlocks = updatedBlocks
+              .filter(b => b.pageId === documentId)
+              .sort((a, b) => a.order - b.order);
+
+            const reorderedBlocks = remainingBlocks.map((block, index) => ({
+              ...block,
+              order: index,
+            }));
+
+            const finalBlocks = [
+              ...updatedBlocks.filter(b => b.pageId !== documentId),
+              ...reorderedBlocks,
+            ];
+
+            return {
+              ...state,
+              blocks: finalBlocks,
+              documents: state.documents.map(doc =>
+                doc.id === documentId ? { ...doc, updatedAt: new Date() } : doc
+              ),
+            };
+          }
         });
       },
 
@@ -293,7 +405,13 @@ export const useDocumentStore = create<DocumentStore>()(
             return block;
           });
 
-          return { ...state, blocks: updatedBlocks };
+          return {
+            ...state,
+            blocks: updatedBlocks,
+            documents: state.documents.map(doc =>
+              doc.id === documentId ? { ...doc, updatedAt: new Date() } : doc
+            ),
+          };
         });
       },
 
@@ -325,6 +443,9 @@ export const useDocumentStore = create<DocumentStore>()(
           return {
             ...state,
             blocks: [...otherBlocks, ...reorderedBlocks],
+            documents: state.documents.map(doc =>
+              doc.id === documentId ? { ...doc, updatedAt: new Date() } : doc
+            ),
           };
         });
       },
