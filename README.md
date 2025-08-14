@@ -3,6 +3,9 @@
 노션(Notion)을 참고하여 만든 블록 기반 문서 편집기입니다.
 React, TypeScript, Zustand, Tailwind CSS를 사용하여 계층 구조의 문서 관리, 마크다운 기반 문서 편집, 페이지 전환 등의 기능을 구현했습니다.
 
+<br />
+<br />
+
 ## 🚀 주요 기능
 
 ### 📝 문서 관리
@@ -36,6 +39,9 @@ React, TypeScript, Zustand, Tailwind CSS를 사용하여 계층 구조의 문서
 - **로컬 스토리지**: 브라우저 localStorage에 모든 데이터 자동 저장
 - **통합 상태 관리**: 문서와 블록 상태를 하나의 스토어에서 관리
 - **자동 동기화**: 상태 변경 시 즉시 저장
+
+<br />
+<br />
 
 ## 🏗️ 프로젝트 구조
 
@@ -96,6 +102,9 @@ notion-clone-coding/
 └── package.json                   # 프로젝트 의존성
 ```
 
+<br />
+<br />
+
 ## 🛠️ 기술 스택
 
 - **Frontend Framework**: React 18
@@ -105,6 +114,9 @@ notion-clone-coding/
 - **Build Tool**: Vite
 - **Routing**: React Router DOM
 - **Font**: Pretendard (한글 최적화 폰트)
+
+<br />
+<br />
 
 ## 📦 설치 및 실행
 
@@ -138,6 +150,9 @@ http://localhost:5173
 ```bash
 npm run build
 ```
+
+<br />
+<br />
 
 ## 🎯 사용 방법
 
